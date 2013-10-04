@@ -42,7 +42,7 @@ class Chef::ResourceDefinitionList::MongoDB
         snapshots.push vol_snapshots
       end
       Chef::Log.info "Found the list of snapshots"
-        r = /Mongo RAID (Snaphsot|Snapshot) ([^ ]+) ([[:digit:]]+)/
+        r = /Mongo RAID (Snaphsot|Snapshot) (.*) ([[:digit:]]+)/
       match_found = false
       # Now we need to find the last complete set of snapshots.  This is done 
       # by parsing the timestamp from the description of the newest snapshot

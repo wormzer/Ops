@@ -26,7 +26,7 @@ def ebs_snapshot(ec2_conn, description, tags_option, volume_ids):
     volumes=ec2_conn.get_all_volumes(volume_ids)
     for volume in volumes:
         volume_index = volumes.index(volume)
-        snapshot=volume.create_snapshot('%s #%s' % (description, volume_index))
+        snapshot=volume.create_snapshot('%s %s' % (description, volume_index))
         # we have some error cases here but we just handle them all by not tagging
         try:
           tags = tags_option.split(' ')

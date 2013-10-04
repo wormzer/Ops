@@ -92,4 +92,5 @@ default[:mongodb][:backup_host] = nil
 default[:mongodb][:mongodb_version] = "2.2.3"
 
 default[:backups][:mongo_volumes] = []
+default[:backups][:snapshot_tags] = {}
 
