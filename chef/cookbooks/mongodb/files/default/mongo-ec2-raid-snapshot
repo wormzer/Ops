@@ -17,25 +17,33 @@ import argparse
 import logging
 import subprocess
 import sys
+import time
 import yaml
 
 
-def ebs_snapshot(ec2_conn, description, tags_option, volume_ids):
+def expire_snapshots(ec2_conn, keep_revisions, period):
+    pass
+
+
+def ebs_snapshot(ec2_conn, args):
     logging.info('Syncing Filesystem')
     subprocess.check_call('sync')
-    volumes=ec2_conn.get_all_volumes(volume_ids)
+    volumes=ec2_conn.get_all_volumes(args.volume_ids)
+    date_marker = time.strftime('%Y-%m-%dT%H:%M:%S')
     for volume in volumes:
         volume_index = volumes.index(volume)
-        snapshot=volume.create_snapshot('%s %s' % (description, volume_index))
+        snapshot=volume.create_snapshot('%s %s %s #%s' % (args.period.capitalize(), args.description, date_marker, volume_index))
         # we have some error cases here but we just handle them all by not tagging
         try:
-          tags = tags_option.split(' ')
+          tags = args.tags.split(' ')
           tags.append("volume_index=%d" % volume_index)
+          tags.append("period=%s" % args.period)
+          tags.append("date_marker=%s" % date_marker)
           tag_dict = dict(tag.split("=") for tag in tags)
           ec2_conn.create_tags([snapshot.id], tag_dict)
         except:
-          if len(tags_option) > 0:
-            logging.error('Unable to tag snapshot %s with tags `%s\'' % (snapshot.id, tags_option))
+          if len(args.tags) > 0:
+            logging.error('Unable to tag snapshot %s with tags `%s\'' % (snapshot.id, args.tags))
 
         logging.info('Creating snapshot of %s: %s' % (volume.id, snapshot.id))
 
@@ -67,6 +75,8 @@ def main():
     parser.add_argument('-r', '--region', dest='region', action='store', default='us-east-1', help='EC2 region like "us-west-2". Default is "us-east-1"')
     parser.add_argument('-d', '--description', dest='description', action='store', default='Mongo RAID Snapshot', help='Description for the EBS snapshot. Defaults is "Mongo RAID Snapshot" ')
     parser.add_argument('-t', '--tags', dest='tags', action='store', default='', help='Tags for the EBS snapshot')
+    parser.add_argument('-P', '--period', dest='period', action='store', default='', help='Period for this snapshot (hourly/daily/weekly/etc.) Open to any values.')
+    parser.add_argument('-k', '--keep-revisions', dest='keep_revisions', action='store', default='0', help='Number of revisions for the given period to keep. Use this to expire old revisions.  Default = 0 (no expiration)')
     parser.add_argument('-H', '--host', dest='mongo_host', action='store', default='localhost', help='Mongo hostname to connect too')
     parser.add_argument('-p', '--port', dest='mongo_port', action='store', default=27017, type=int, help='Mongo port to connect too')
     parser.add_argument('volume_ids', action='store', metavar='VOLUME IDS', nargs='+', help='EBS volume id(s) used for snapshotting')
@@ -102,7 +112,7 @@ def main():
         log_and_die('Unable to read AWS config file %s: %s' % (args.aws_conf,e))
     except KeyError:
         log_and_die('AWS config file %s is not formatted correctly' % args.aws_conf)
-                
+
     try:
         mongo_conn = MongoClient(host=args.mongo_host, port=args.mongo_port)
     except ConnectionFailure:
@@ -110,7 +120,12 @@ def main():
 
     lock_mongo(mongo_conn)
     try:
-        ebs_snapshot(ec2_conn, args.description, args.tags, args.volume_ids)
+      expire_snapshots(ec2_conn, args.keep_revisions, args.period)
+    except:
+      logging.error('Error expiring old snapshots')
+
+    try:
+        ebs_snapshot(ec2_conn, args)
     except CalledProcessError, e:
         log_and_die('Unable to sync file system: %s' % e)
     except EC2ResponseError, e:
