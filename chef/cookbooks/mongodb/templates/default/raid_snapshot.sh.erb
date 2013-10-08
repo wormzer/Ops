@@ -11,25 +11,25 @@ touch -d "$(date -d '1 days ago')" $day_ago
 if ! test -f $daily_backup ; then
   touch -d "$(date -d '2 days ago')" $daily_backup
   snapshot_period=daily
-  keep_revisions=10
+  keep_revisions=<%= node['backups']['keep_revisions']['daily'] || 0 %>
 fi
 
 # if daily_backup timestamp is older than a day_ago, make daily snapshot
 if [ $daily_backup -ot $day_ago ] ; then
   touch $daily_backup
   snapshot_period=daily
-  keep_revisions=10
+  keep_revisions=<%= node['backups']['keep_revisions']['daily'] || 0 %>
 else
   snapshot_period=hourly
-  # we have this set up for every-other-hour so we can get 20 hours worth of hourly backups saving just 10
-  keep_revisions=10
+  keep_revisions=<%= node['backups']['keep_revisions']['hourly'] || 0 %>
 fi
 
 /usr/local/bin/mongo-ec2-raid-snapshot \
-		--quiet                                                      \
-		--region <%= node['backups']['region'] %>                    \
-		--description "Mongo RAID Snapshot (<%=@snapshot_tags%>)"    \
-		--tags "<%=@snapshot_tags%>"                                 \
-		--period $snapshot_period                                    \
-		<%= node['backups']['mongo_volumes'].join(" ") %>
+    --quiet \
+    --region <%= node['backups']['region'] %> \
+    --description "Mongo RAID Snapshot (<%= node['backups']['snapshot_tags'].collect { |k,v| "#{k}=#{v}" }.join(' ') %>)" \
+    --tags "<%= node['backups']['snapshot_tags'].collect { |k,v| "#{k}=#{v}" }.join(' ') %>" \
+    --period $snapshot_period \
+    --retain-periods $keep_revisions \
+    <%= node['backups']['mongo_volumes'].join(" ") %>
 

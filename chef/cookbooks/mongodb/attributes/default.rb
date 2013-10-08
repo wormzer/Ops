@@ -93,4 +93,5 @@ default[:mongodb][:mongodb_version] = "2.2.3"
 
 default[:backups][:mongo_volumes] = []
 default[:backups][:snapshot_tags] = {}
+default[:backups][:keep_revisions] = {"hourly" => 0, "daily" => 0}
 
