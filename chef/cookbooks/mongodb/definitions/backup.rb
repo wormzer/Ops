@@ -1,5 +1,5 @@
 define :generate_raid_backups do
-  aws_creds = Chef::EncryptedDataBagItem.load("passwords", "aws")
+  aws_creds = Chef::EncryptedDataBagItem.load("passwords", node[:backups][:aws_passwords])
 
 #  volumes = node[:backups][:mongo_volumes].join(" ")
 
