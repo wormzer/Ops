@@ -20,7 +20,7 @@ class Chef::ResourceDefinitionList::MongoDB
           :access_key_id => key,
           :secret_access_key => secret_key).regions[region]
 
-    # group our snapshots by date_marker, and while were doing this, filter out snapshots that are incomplete or for 
+    # group our snapshots by timestamp, and while were doing this, filter out snapshots that are incomplete or for 
     # other volumes. We put all of this logic in a memoize block so each fetch of a snapshot
     # attribute will not result in a network connection.
     snapshots_by_marker = Hash.new {|h,k| h[k] = Array.new}
@@ -29,13 +29,13 @@ class Chef::ResourceDefinitionList::MongoDB
       volumes.each { |v| volume_filter << "volume-id" << v }
 
       ec2.snapshots.filter(*volume_filter).filter("status", "completed").each do |s|
-        snapshots_by_marker[s.tags['date_marker']] << s if s.tags['date_marker']
+        snapshots_by_marker[s.tags['timestamp']] << s if s.tags['timestamp']
       end
     end
 
     # we find the last one that has the right number of volumes and return it
-    snapshots_by_marker.keys.reverse_each do |date_marker|
-      snapshots = snapshots_by_marker[date_marker]
+    snapshots_by_marker.keys.reverse_each do |timestamp|
+      snapshots = snapshots_by_marker[timestamp]
       return snapshots.map { |s| s.id } if snapshots.size == volumes.size
     end
 

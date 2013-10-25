@@ -24,10 +24,10 @@ import yaml
 def expire_snapshots(ec2_conn, volume, args):
     retain_periods = int(args.retain_periods)
     if retain_periods > 0:
-        snapshots = ec2_conn.get_all_snapshots(filters={'volume-id': volume.id, 'tag:period': args.period, 'tag-key': 'date_marker'})
+        snapshots = ec2_conn.get_all_snapshots(filters={'volume-id': volume.id, 'tag:period': args.period, 'tag-key': 'timestamp'})
         print "%d %s snapshots for %s, keeping %s" % (len(snapshots), args.period, volume.id, retain_periods)
 
-        snapshots.sort(key=lambda s: s.tags['date_marker'], reverse=True)
+        snapshots.sort(key=lambda s: s.tags['timestamp'], reverse=True)
         while len(snapshots) > retain_periods:
             erase_this_snapshot = snapshots.pop()
             erase_this_snapshot.delete()
@@ -37,7 +37,7 @@ def ebs_snapshot(ec2_conn, args):
     logging.info('Syncing Filesystem')
     subprocess.check_call('sync')
     volumes=ec2_conn.get_all_volumes(args.volume_ids)
-    date_marker = time.strftime('%Y-%m-%dT%H:%M:%S')
+    timestamp = time.strftime('%Y-%m-%dT%H:%M:%S')
     for volume in volumes:
         expire_snapshots(ec2_conn, volume, args)
 
@@ -46,9 +46,9 @@ def ebs_snapshot(ec2_conn, args):
             arg_tags = dict(tag.split("=") for tag in args.tags.split(' '))
             tags.update(arg_tags)
 
-        tags.update({'volume_index': volumes.index(volume), 'period': args.period, 'date_marker': date_marker})
+        tags.update({'volume_index': volumes.index(volume), 'period': args.period, 'timestamp': timestamp})
 
-        snapshot = volume.create_snapshot('%s %s %s #%s' % (args.period.capitalize(), args.description, date_marker, tags['volume_index']))
+        snapshot = volume.create_snapshot('%s %s %s #%s' % (args.period.capitalize(), args.description, timestamp, tags['volume_index']))
         ec2_conn.create_tags([snapshot.id], tags)
         logging.info('Creating snapshot of %s: %s' % (volume.id, snapshot.id))
 
