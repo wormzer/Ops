@@ -10,6 +10,7 @@ except ImportError:
     #old versions of pymongo use Connection
     from pymongo import Connection as MongoClient
 from boto.ec2 import *
+from boto.utils import *
 from boto.exception import EC2ResponseError
 from pymongo.errors import ConnectionFailure
 from subprocess import CalledProcessError
@@ -21,11 +22,13 @@ import time
 import yaml
 
 
-def expire_snapshots(ec2_conn, volume, args):
+def expire_snapshots(ec2_conn, volume_index, args, tags):
     retain_periods = int(args.retain_periods)
     if retain_periods > 0:
-        snapshots = ec2_conn.get_all_snapshots(filters={'volume-id': volume.id, 'tag:period': args.period, 'tag-key': 'date_marker'})
-        print "%d %s snapshots for %s, keeping %s" % (len(snapshots), args.period, volume.id, retain_periods)
+        snapshot_filters = dict(["tag:%s" % tag, tag_value] for tag, tag_value in tags.iteritems())
+        snapshot_filters.update({'tag:volume-index': volume_index, 'tag:period': args.period, 'tag-key': 'date_marker'})
+        snapshots = ec2_conn.get_all_snapshots(filters={'tag:volume-index': volume_index, 'tag:period': args.period, 'tag-key': 'date_marker'})
+        print "%d %s snapshots for #%d, keeping %s" % (len(snapshots), args.period, volume_index, retain_periods)
 
         snapshots.sort(key=lambda s: s.tags['date_marker'], reverse=True)
         while len(snapshots) > retain_periods:
@@ -33,22 +36,22 @@ def expire_snapshots(ec2_conn, volume, args):
             erase_this_snapshot.delete()
 
 
-def ebs_snapshot(ec2_conn, args):
+def ebs_snapshot(ec2_conn, args, tags):
+    volume_filters = dict(["tag:%s" % tag, tag_value] for tag, tag_value in tags.iteritems())
+    volume_filters['attachment.instance-id'] = get_instance_metadata()['instance-id']
+
     logging.info('Syncing Filesystem')
     subprocess.check_call('sync')
-    volumes=ec2_conn.get_all_volumes(args.volume_ids)
+    volumes=ec2_conn.get_all_volumes(filters=volume_filters)
     date_marker = time.strftime('%Y-%m-%dT%H:%M:%S')
     for volume in volumes:
-        expire_snapshots(ec2_conn, volume, args)
+        volume_index = volumes.index(volume)
+        expire_snapshots(ec2_conn, volume_index, args, tags)
 
-        tags = dict()
-        if args.tags:
-            arg_tags = dict(tag.split("=") for tag in args.tags.split(' '))
-            tags.update(arg_tags)
+        tags = tags.copy()
+        tags.update({'volume-index': volume_index, 'period': args.period, 'date_marker': date_marker})
 
-        tags.update({'volume_index': volumes.index(volume), 'period': args.period, 'date_marker': date_marker})
-
-        snapshot = volume.create_snapshot('%s %s %s #%s' % (args.period.capitalize(), args.description, date_marker, tags['volume_index']))
+        snapshot = volume.create_snapshot('%s %s %s #%s' % (args.period.capitalize(), args.description, date_marker, volume_index))
         ec2_conn.create_tags([snapshot.id], tags)
         logging.info('Creating snapshot of %s: %s' % (volume.id, snapshot.id))
 
@@ -84,11 +87,15 @@ def main():
     parser.add_argument('-R', '--retain-periods', dest='retain_periods', action='store', default='0', help='Retain # of revisions for the given period. Use this to expire old revisions.  Default = 0 (retain all)')
     parser.add_argument('-H', '--host', dest='mongo_host', action='store', default='localhost', help='Mongo hostname to connect to')
     parser.add_argument('-p', '--port', dest='mongo_port', action='store', default=27017, type=int, help='Mongo port to connect to')
-    parser.add_argument('volume_ids', action='store', metavar='VOLUME IDS', nargs='+', help='EBS volume id(s) used for snapshotting')
     log = parser.add_mutually_exclusive_group()
     log.add_argument('-v', '--verbose', dest='verbose', action='store_true', default=False, help='Add more verbosity')
     log.add_argument('-q', '--quiet', dest='quiet', action='store_true', default=False, help='Quiet mode')
     args = parser.parse_args()
+
+    if not args.tags:
+        log_and_die('Missing required tags argument i.e. --tags "stack=prod shard=1"')
+
+    tags = dict(tag.split("=") for tag in args.tags.split(' '))
 
     if args.verbose:
         log_level = logging.DEBUG
@@ -126,7 +133,7 @@ def main():
     lock_mongo(mongo_conn)
 
     try:
-        ebs_snapshot(ec2_conn, args)
+        ebs_snapshot(ec2_conn, args, tags)
     except CalledProcessError, e:
         log_and_die('Unable to sync file system: %s' % e)
     except EC2ResponseError, e:
@@ -139,3 +146,5 @@ def main():
     sys.exit(0)
 
 main()
+
+# vim: set ts=4 sw=4 tw=0 softtabstop=4 et :
