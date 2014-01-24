@@ -244,6 +244,8 @@ define :create_raided_drives_from_snapshot, :disk_counts => 4,
     aws = data_bag_item(node[:aws][:databag_name], node[:aws][:databag_entry])
   end
   aws_ebs_raid "createmongodir" do
+        aws_access_key aws['aws_access_key_id']
+        aws_secret_access_key aws['aws_secret_access_key']
         mount_point node[:mongodb][:dbpath]
         disk_count params[:disk_counts]
         disk_size  params[:disk_size]
