@@ -5,7 +5,7 @@ define :generate_raid_backups do
     aws_creds = Chef::EncryptedDataBagItem.load("passwords", node[:backups][:aws_passwords])
   end
 
-  %q{hourly daily}.each do |period|
+  %w{hourly daily}.each do |period|
     template "/usr/local/bin/#{period}_snapshot.sh" do
       source "#{period}_snapshot.sh.erb"
       owner "root"
