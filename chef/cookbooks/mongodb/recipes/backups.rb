@@ -16,13 +16,5 @@ end
 
 # install backup cron on the backup node
 cron "mongo_backups" do
-  user "root"
-  minute "0"
-  hour "*/2"
-  command "/bin/bash /usr/local/bin/raid_snapshot.sh"
-  if node[:hostname] == node[:mongodb][:backup_host]
-    action :create
-  else
-    action :delete
-  end
+	action :delete
 end
